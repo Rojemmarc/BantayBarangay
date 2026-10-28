@@ -40,6 +40,19 @@ class Web(TestCase):
         assert b'id="latitude" name="latitude" type="number"' in response.content
         assert b'id="longitude" name="longitude" type="number"' in response.content
         assert 'https://tile.openstreetmap.de' in response['Content-Security-Policy']
+    def test_report_form_submits_with_csrf(s):
+        c=Client(enforce_csrf_checks=True);c.force_login(s.res)
+        form=c.get('/app/new/');assert form.status_code==200 and c.cookies.get('csrftoken')
+        response=c.post('/app/new/',{
+            'csrfmiddlewaretoken':c.cookies['csrftoken'].value,
+            'category':Category.objects.get(name='Flooding').pk,
+            'title':'Flooded street',
+            'description':'Flood water is blocking the street.',
+            'latitude':'10.3',
+            'longitude':'123.8',
+            'photos':png(),
+        })
+        assert response.status_code==302 and Report.objects.filter(reporter=s.res,title='Flooded street').exists()
     def test_resident_home_shows_alerts_and_report_links(s):
         s.client.force_login(s.res);response=s.client.get('/app/')
         assert b'href="/app/alerts/"' in response.content
