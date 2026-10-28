@@ -4,7 +4,7 @@ tg.addEventListener('click',function(){var m=d.documentElement.dataset.theme==='
 d.addEventListener('submit',function(e){var f=e.target;if(f.dataset.confirm&&!confirm(f.dataset.confirm)){e.preventDefault();return}
 if(f.dataset.nobusy!==undefined||f.method==='get')return;if(f.dataset.busy){e.preventDefault();return}f.dataset.busy='1';
 var b=e.submitter||$('button:not([type=button])',f);if(b){setTimeout(function(){b.dataset.label=b.textContent;b.disabled=true;b.textContent='Please wait…'},0)}});
-addEventListener('pageshow',function(){d.querySelectorAll('form[data-busy]').forEach(function(f){delete f.dataset.busy;f.querySelectorAll('button[disabled]').forEach(function(b){b.disabled=false;if(b.dataset.label)b.textContent=b.dataset.label})})});
+addEventListener('pageshow',function(e){if(e.persisted){location.reload();return}d.querySelectorAll('form[data-busy]').forEach(function(f){delete f.dataset.busy;f.querySelectorAll('button[disabled]').forEach(function(b){b.disabled=false;if(b.dataset.label)b.textContent=b.dataset.label})})});
 if(window.L){d.querySelectorAll('[data-map]').forEach(function(el){var lat=parseFloat(el.dataset.lat),lng=parseFloat(el.dataset.lng),pick=el.hasAttribute('data-pick'),la=$('#latitude'),lo=$('#longitude'),status=$('#mapStatus'),has=!pick||(la&&la.value&&lo&&lo.value);
 if(pick&&has){lat=parseFloat(la.value);lng=parseFloat(lo.value);has=Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180;if(!has){lat=parseFloat(el.dataset.lat);lng=parseFloat(el.dataset.lng)}}
 var m=L.map(el).setView([lat,lng],15),tiles=L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png',{attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',maxZoom:19}).addTo(m);

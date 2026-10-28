@@ -1,8 +1,19 @@
 # BantayBarangay (Django templates + PostgreSQL)
 
 One Django service. Pages are server-rendered from `backend/templates/`; CSS, JS, logo and Leaflet live in `backend/static/`.
-Resident side: `/app/`. Official side: `/official/`. Django admin (superuser only): `/django-admin/`. Health check: `/healthz`.
+Resident and Volunteer side: `/app/`. Official and Staff side: `/official/`. LGU analytics: `/lgu/`. Django admin (superuser only): `/django-admin/`. Health check: `/healthz`.
 The REST API under `/api/` is still there (not used by the pages); it can be removed later.
+
+## Target users and current system behavior
+
+| Target user | Supported workflow | Access boundary |
+|---|---|---|
+| Barangay residents | Register, submit a concern with category, photo, and map location, follow its status, receive alerts, read the bulletin, and delete their own Pending reports. | Public registration creates Resident accounts only. Residents see their own reports; submissions are limited to five per day. |
+| Barangay officials | Review reports from their barangay, assign a department and an active Staff member, transition reports, comment, and post/delete bulletin items. | Official access is barangay-scoped. Reporter contact details are available to Officials. Emergency reports are highlighted and prioritized. |
+| Barangay staff | Work from an assigned-report queue, update the status of reports assigned to them, comment, and receive alerts. | Staff cannot view unassigned cases, assign reports, access reporter contact details, or manage announcements. |
+| Community leaders and volunteers | Submit reports, view local reports for community coordination, add community updates to active cases, receive alerts, and read the bulletin. | Volunteer updates do not change report status. Other reporters' identities are hidden. Volunteers cannot assign cases or manage announcements. |
+| Local Government Units (LGUs) | Review cross-barangay aggregate totals by status, category, and barangay. | LGU accounts do not receive report-level access, reporter identities, free text, photos, or precise locations. |
+| System administrators | Use Django Admin (`/django-admin/`) for trusted system-level user and record administration. | Superuser access is separate from the operational Official and Staff roles. Grant it only to trusted administrators. |
 
 ## Run locally (Windows Command Prompt)
 From the project folder, run:

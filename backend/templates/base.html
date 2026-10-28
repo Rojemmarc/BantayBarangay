@@ -7,7 +7,7 @@
 <div class="brand-block"><a class="brand-name" href="{% url 'index' %}" aria-label="BantayBarangay home"><span class="brand-bantay">Bantay</span><span class="brand-barangay">Barangay</span></a><span class="tag">{{ role_label }}</span></div>
 {% with n=request.resolver_match.url_name %}<nav class="main-nav" aria-label="Main navigation">
 <a href="{% url home_name %}"{% if n == home_name or n == 'detail' or n == 'new_report' %} class="active"{% endif %}>Home</a>
-{% if not user.is_official %}<a href="{% url 'alerts' %}"{% if n == 'alerts' %} class="active"{% endif %}>Alerts{% if unread %} ({{ unread }}){% endif %}</a>{% endif %}
+{% if user.is_reporter or user.is_staff_member %}<a href="{% url 'alerts' %}"{% if n == 'alerts' %} class="active"{% endif %}>Alerts{% if unread %} ({{ unread }}){% endif %}</a>{% endif %}
 <a href="{% url 'bulletin' %}"{% if n == 'bulletin' %} class="active"{% endif %}>Bulletin</a></nav>{% endwith %}
 <div class="user-tools"><button type="button" class="tg" id="themeToggle" aria-label="Switch to dark mode">☾</button>
 <form method="post" action="{% url 'logout' %}" data-nobusy>{% csrf_token %}<button class="b">Log out</button></form></div></header>

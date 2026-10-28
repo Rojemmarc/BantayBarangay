@@ -5,6 +5,15 @@ class CSPMiddleware:
         r=self.get(request)
         if not request.path.startswith('/django-admin'): r.headers.setdefault('Content-Security-Policy',POLICY)
         return r
+class PrivateNoCacheMiddleware:
+    def __init__(self,get): self.get=get
+    def __call__(self,request):
+        r=self.get(request)
+        if request.user.is_authenticated:
+            r.headers['Cache-Control']='private, no-store, no-cache, max-age=0, must-revalidate'
+            r.headers['Pragma']='no-cache'
+            r.headers['Expires']='0'
+        return r
 class HealthMiddleware:
     def __init__(self,get): self.get=get
     def __call__(self,request):

@@ -14,6 +14,8 @@ class Web(TestCase):
         for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance');P='Str0ng#Pass1'
         s.res=User.objects.create_user('r@x.ph',P,full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph',P,full_name='Off One',barangay=s.b,role='Official')
+        s.staff=User.objects.create_user('staff@x.ph',P,full_name='Staff One',barangay=s.b,role='Staff')
+        s.volunteer=User.objects.create_user('vol@x.ph',P,full_name='Volunteer One',barangay=s.b,role='Volunteer')
         s.lgu=User.objects.create_user('lgu@x.ph',P,full_name='LGU User',barangay=s.b,role='LGU')
         s.other=User.objects.create_user('z@x.ph',P,full_name='Other',barangay=s.b2,role='Official')
     def rep(s,**x):
@@ -33,6 +35,13 @@ class Web(TestCase):
         assert s.client.get('/app/').status_code==302 and s.client.get('/bulletin/').status_code==302
         s.client.force_login(s.res);assert s.client.get('/official/',follow=True).redirect_chain[-1][0]=='/app/' and s.client.get('/reports/1/transition/').status_code in(403,405)
         s.client.force_login(s.off);assert s.client.get('/app/new/').status_code==403
+    def test_authenticated_pages_are_not_cached(s):
+        s.client.force_login(s.res)
+        resident=s.client.get('/app/')
+        assert 'no-store' in resident['Cache-Control'] and resident['Pragma']=='no-cache'
+        s.client.force_login(s.off)
+        official=s.client.get('/official/')
+        assert 'no-store' in official['Cache-Control'] and official['Pragma']=='no-cache'
     def test_new_report_has_categories_and_location_inputs(s):
         s.client.force_login(s.res);response=s.client.get('/app/new/')
         for category in ('Infrastructure','Safety','Sanitation','Flooding','Noise','Emergency'):
@@ -57,11 +66,16 @@ class Web(TestCase):
         s.client.force_login(s.res);response=s.client.get('/app/')
         assert b'href="/app/alerts/"' in response.content
         assert b'href="/app/new/"' in response.content
-    def test_lgu_uses_official_access(s):
-        assert s.lgu.is_official and not s.lgu.is_reporter
+    def test_lgu_gets_aggregate_only_dashboard(s):
+        assert s.client.get('/lgu/').status_code==302
+        assert not s.lgu.is_official and s.lgu.is_lgu and not s.lgu.is_reporter
+        s.client.force_login(s.res);s.rep(title='Private report title')
         s.client.force_login(s.lgu)
-        assert s.client.get('/',follow=True).redirect_chain[-1][0]=='/official/'
-        assert s.client.get('/official/').status_code==200
+        assert s.client.get('/',follow=True).redirect_chain[-1][0]=='/lgu/'
+        dashboard=s.client.get('/lgu/')
+        assert dashboard.status_code==200 and b'Private report title' not in dashboard.content
+        assert b'Total reports' in dashboard.content and b'1' in dashboard.content
+        assert s.client.get('/official/',follow=True).redirect_chain[-1][0]=='/lgu/'
         assert s.client.get('/app/new/').status_code==403
         assert s.client.get('/app/alerts/').status_code==403
     def test_register(s):
@@ -75,8 +89,9 @@ class Web(TestCase):
     def test_official_actions(s):
         s.client.force_login(s.res);u=s.rep().url;i=int(u.strip('/').split('/')[-1]);t=f'/reports/{i}/transition/'
         s.client.force_login(s.off)
-        assert b'Select a department' in s.client.post(t,{'status':'Assigned'},follow=True).content
-        assert b'updated to Assigned' in s.client.post(t,{'status':'Assigned','department':s.d.pk},follow=True).content
+        assert b'Select a staff member' in s.client.post(t,{'status':'Assigned','department':s.d.pk},follow=True).content
+        assert b'updated to Assigned' in s.client.post(t,{'status':'Assigned','department':s.d.pk,'assigned_to':s.staff.pk},follow=True).content
+        assert s.staff.notifications.filter(report_id=i,message__contains='assigned').exists()
         s.client.post(t,{'status':'In Progress'});assert b'comment explaining' in s.client.post(t,{'status':'Resolved'},follow=True).content
         s.client.post(t,{'status':'Resolved','comment':'Fixed the drain'});r=Report.objects.get(pk=i);assert r.status=='Resolved' and r.history.count()==4 and r.reporter.notifications.count()==3
         s.client.force_login(s.res);a=s.client.get('/app/alerts/');assert b'is now Resolved' in a.content and s.res.notifications.filter(is_read=False).count()==0
@@ -86,8 +101,36 @@ class Web(TestCase):
         s.client.force_login(s.off);assert s.client.get(f'/photos/{r.photos.first().pk}/').status_code==200
     def test_anonymous_reporter(s):
         s.client.force_login(s.res);s.client.post('/app/new/',dict(category=Category.objects.get(name='Safety').pk,title='Odd',description='x'*25,latitude='1',longitude='1',photos=png(),is_suspicious_activity='on'))
-        v=User.objects.create_user('v@x.ph','Str0ng#Pass1',full_name='Viewer Person',barangay=s.b);pk=Report.objects.get().pk;s.client.force_login(v)
+        v=User.objects.create_user('v@x.ph','Str0ng#Pass1',full_name='Viewer Person',barangay=s.b,role='Volunteer');pk=Report.objects.get().pk;s.client.force_login(v)
         h=s.client.get(f'/reports/{pk}/').content;assert b'Anonymous' in h and b'Res One' not in h
+    def test_staff_assignment_scope_and_actions(s):
+        s.client.force_login(s.res);response=s.rep(title='Assigned case');pk=int(response.url.strip('/').split('/')[-1])
+        s.client.force_login(s.off)
+        s.client.post(f'/reports/{pk}/transition/',{'status':'Assigned','department':s.d.pk,'assigned_to':s.staff.pk})
+        report=Report.objects.get(pk=pk);assert report.assigned_to==s.staff and report.status=='Assigned'
+        s.client.force_login(s.staff)
+        dashboard=s.client.get('/official/')
+        assert dashboard.status_code==200 and b'Assigned case' in dashboard.content
+        assert b'href="/app/new/"' not in dashboard.content
+        assert s.client.get(f'/reports/{pk}/').status_code==200
+        assert b'Res One' not in s.client.get(f'/reports/{pk}/').content
+        assert s.client.get('/app/alerts/').status_code==200
+        assert s.client.post('/bulletin/',{'title':'Staff post','body':'No','type':'Advisory'}).status_code==403
+        s.client.post(f'/reports/{pk}/transition/',{'status':'In Progress'})
+        assert Report.objects.get(pk=pk).status=='In Progress'
+        s.client.post(f'/reports/{pk}/comment/',{'comment':'Work is underway'})
+        assert Comment.objects.filter(report_id=pk,author=s.staff,is_official=True).exists()
+        other=Report.objects.create(reporter=s.res,barangay=s.b,category=Category.objects.get(name='Flooding'),title='Unassigned',description='private',latitude=1,longitude=1)
+        assert s.client.get(f'/reports/{other.pk}/').status_code==404
+    def test_volunteer_can_coordinate_without_management_access(s):
+        s.client.force_login(s.res);response=s.rep(title='Community issue');pk=int(response.url.strip('/').split('/')[-1])
+        s.client.force_login(s.volunteer)
+        page=s.client.get(f'/reports/{pk}/')
+        assert page.status_code==200 and b'Anonymous' in page.content and b'Res One' not in page.content
+        assert s.client.post(f'/reports/{pk}/comment/',{'comment':'Neighbors are coordinating'}).status_code==302
+        assert Comment.objects.filter(report_id=pk,author=s.volunteer,is_official=False).exists()
+        assert s.client.post(f'/reports/{pk}/transition/',{'status':'Assigned','department':s.d.pk}).status_code==403
+        assert s.client.post('/bulletin/',{'title':'Volunteer post','body':'No','type':'Advisory'}).status_code==403
     def test_bulletin_rules(s):
         s.client.force_login(s.res);assert s.client.post('/bulletin/',dict(title='abc',body='hello',type='Advisory')).status_code==403
         s.client.force_login(s.off);assert b'not in the past' in s.client.post('/bulletin/',dict(title='abc',body='hello',type='Event',event_date='2000-01-01')).content.replace(b'be in the',b'be in the')

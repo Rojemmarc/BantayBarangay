@@ -16,8 +16,11 @@ class T(APITestCase):
         for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance')
         s.res=User.objects.create_user('r@x.ph','Str0ng#Pass1',full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph','Str0ng#Pass1',full_name='Off One',barangay=s.b,role='Official')
+        s.staff=User.objects.create_user('staff@x.ph','Str0ng#Pass1',full_name='Staff One',barangay=s.b,role='Staff')
+        s.volunteer=User.objects.create_user('vol@x.ph','Str0ng#Pass1',full_name='Volunteer One',barangay=s.b,role='Volunteer')
         s.lgu=User.objects.create_user('lgu@x.ph','Str0ng#Pass1',full_name='LGU User',barangay=s.b,role='LGU')
         s.other=User.objects.create_user('z@x.ph','Str0ng#Pass1',full_name='Other',barangay=s.b2,role='Official')
+        s.other_staff=User.objects.create_user('staff-b@x.ph','Str0ng#Pass1',full_name='Other Staff',barangay=s.b2,role='Staff')
     def post(s,cat='Flooding',**x):
         d=dict(title='Flood',description='x'*25,category=Category.objects.get(name=cat).id,latitude='10.3',longitude='123.8',photos=[png()]);d.update(x)
         return s.client.post('/api/reports/',d,format='multipart')
@@ -48,7 +51,8 @@ class T(APITestCase):
         s.client.force_login(s.off)
         assert s.client.post(u,dict(status='Resolved'),format='json').status_code==400  # skip step
         assert s.client.post(u,dict(status='Assigned'),format='json').status_code==400  # needs dept
-        assert s.client.post(u,dict(status='Assigned',department=s.d.id),format='json').status_code==200
+        assigned=s.client.post(u,dict(status='Assigned',department=s.d.id,assigned_to=s.staff.id),format='json')
+        assert assigned.status_code==200 and Report.objects.get(pk=i).assigned_to==s.staff
         assert s.client.post(u,dict(status='In Progress'),format='json').status_code==200
         assert s.client.post(u,dict(status='Resolved'),format='json').status_code==400  # needs comment
         assert s.client.post(u,dict(status='Resolved',comment='Fixed the drain'),format='json').status_code==200
@@ -59,9 +63,40 @@ class T(APITestCase):
         assert s.client.get(f'/api/reports/{i}/').status_code==404 and s.client.post(f'/api/reports/{i}/transition/',dict(status='Rejected',comment='abcdef'),format='json').status_code==404
     def test_anonymous_and_privacy(s):
         s.client.force_login(s.res);i=s.post('Safety',is_suspicious_activity=True).data['id']
-        v=User.objects.create_user('v@x.ph','Str0ng#Pass1',full_name='Viewer',barangay=s.b);s.client.force_login(v)
+        v=User.objects.create_user('v@x.ph','Str0ng#Pass1',full_name='Viewer',barangay=s.b,role='Volunteer');s.client.force_login(v)
         assert s.client.get(f'/api/reports/{i}/').data['reporter']=='Anonymous'
         s.client.force_login(s.off);d=s.client.get(f'/api/reports/{i}/').data;assert d['reporter']=='Res One' and d['reporter_contact']['email']=='r@x.ph'  # officials see the reporter (BR-29/28)
+    def test_staff_api_scope_assignment_and_permissions(s):
+        s.client.force_login(s.res);i=s.post().data['id'];u=f'/api/reports/{i}/transition/'
+        s.client.force_login(s.off)
+        assert s.client.post(u,dict(status='Assigned',department=s.d.id,assigned_to=s.other_staff.id),format='json').status_code==404
+        assert s.client.post(u,dict(status='Assigned',department=s.d.id,assigned_to=s.staff.id),format='json').status_code==200
+        assert s.staff.notifications.filter(report_id=i,message__contains='assigned').exists()
+        s.client.force_login(s.res);other=s.post().data['id']
+        s.client.force_login(s.staff)
+        detail=s.client.get(f'/api/reports/{i}/')
+        assert detail.status_code==200 and detail.data['reporter']=='Anonymous'
+        assert 'reporter_contact' not in detail.data
+        assert s.client.post(u,dict(status='In Progress'),format='json').status_code==200
+        assert s.client.post(f'/api/reports/{i}/comment/',dict(text='Work is underway'),format='json').status_code==200
+        assert s.client.post('/api/announcements/',dict(title='Staff post',body='No',type='Advisory'),format='json').status_code==403
+        assert s.client.get(f'/api/reports/{other}/').status_code==404
+    def test_lgu_api_is_aggregate_only(s):
+        s.client.force_login(s.res);s.post(title='Private report title')
+        s.client.force_login(s.lgu)
+        summary=s.client.get('/api/lgu/summary/')
+        assert summary.status_code==200 and summary.data['total']==1 and 'by_barangay' in summary.data
+        assert s.client.get('/api/reports/').status_code==403
+        assert s.client.get('/api/stats/').status_code==403
+        assert s.client.get('/api/ranking/').status_code==403
+    def test_volunteer_can_comment_but_not_manage(s):
+        s.client.force_login(s.res);i=s.post().data['id']
+        s.client.force_login(s.volunteer)
+        assert s.client.get(f'/api/reports/{i}/').data['reporter']=='Anonymous'
+        assert s.client.post(f'/api/reports/{i}/comment/',dict(text='Neighbors are coordinating'),format='json').status_code==200
+        assert Comment.objects.filter(report_id=i,author=s.volunteer,is_official=False).exists()
+        assert s.client.post(f'/api/reports/{i}/transition/',dict(status='Assigned'),format='json').status_code==403
+        assert s.client.post('/api/announcements/',dict(title='Volunteer post',body='No',type='Advisory'),format='json').status_code==403
     def test_delete_only_own_pending(s):
         s.client.force_login(s.res);i=s.post().data['id'];s.client.force_login(s.off);assert s.client.delete(f'/api/reports/{i}/').status_code==403
         s.client.force_login(s.res);assert s.client.delete(f'/api/reports/{i}/').status_code==204

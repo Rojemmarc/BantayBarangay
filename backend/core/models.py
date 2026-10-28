@@ -31,7 +31,13 @@ class User(AbstractBaseUser,PermissionsMixin):
     objects=UserManager();USERNAME_FIELD='email';REQUIRED_FIELDS=['full_name']
     class Meta: constraints=[models.CheckConstraint(condition=Q(role__in=ROLES),name='ck_user_role'),models.CheckConstraint(condition=Q(barangay__isnull=False)|Q(is_superuser=True),name='ck_user_barangay')]  # BR-03/04
     @property
-    def is_official(self): return self.role in('Official','Staff','LGU') or self.is_superuser
+    def is_official(self): return self.role in('Official','Staff') or self.is_superuser
+    @property
+    def is_staff_member(self): return self.role=='Staff' and not self.is_superuser
+    @property
+    def is_lgu(self): return self.role=='LGU' and not self.is_superuser
+    @property
+    def can_manage_reports(self): return self.role=='Official' or self.is_superuser
     @property
     def is_reporter(self): return self.role in('Resident','Volunteer') and not self.is_superuser
     def __str__(s): return s.email

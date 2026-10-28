@@ -34,17 +34,28 @@ def role(official):
         @login_required
         @wraps(f)
         def w(r,*a,**k):
-            if r.user.is_official!=official: raise PermissionDenied
+            allowed=r.user.is_official if official else r.user.is_reporter
+            if not allowed: raise PermissionDenied
             return f(r,*a,**k)
         return w
     return deco
-def scope(u): return Report.objects.filter(barangay=u.barangay).select_related('reporter','category','department')  # BR-19/20
+def scope(u):
+    q=Report.objects.all() if u.is_superuser and not u.barangay_id else Report.objects.filter(barangay=u.barangay)
+    return q.select_related('reporter','category','department','assigned_to')  # BR-19/20
+def reports_for(u):
+    if u.is_lgu: raise PermissionDenied('LGU accounts can only view aggregated report data.')
+    if u.is_superuser or u.role=='Official': return scope(u)
+    if u.is_staff_member: return scope(u).filter(assigned_to=u)
+    if u.role=='Volunteer': return scope(u)
+    return Report.objects.filter(reporter=u).select_related('reporter','category','department','assigned_to')
 def deco_report(x,u):
-    x.who='Anonymous' if x.is_suspicious_activity and not u.is_official and x.reporter_id!=u.id else x.reporter.full_name  # BR-29
+    x.who='Anonymous' if x.reporter_id!=u.id and (x.is_suspicious_activity or not u.can_manage_reports) else x.reporter.full_name  # BR-29
     x.active=x.is_emergency and x.status in ACTIVE
     return x
 
-def index(r): return redirect(('official' if r.user.is_official else 'app') if r.user.is_authenticated else 'login')
+def index(r):
+    if not r.user.is_authenticated: return redirect('login')
+    return redirect('lgu_dashboard' if r.user.is_lgu else 'official' if r.user.is_official else 'app')
 def legal(r): return render(r,'legal.html')
 def login_view(r):
     if r.user.is_authenticated: return redirect('index')
@@ -84,16 +95,17 @@ def forgot(r):
     return render(r,'auth/forgot.html',{'sent':sent})
 
 def stats(u):
-    q=scope(u) if u.is_official else Report.objects.filter(reporter=u);c=lambda *s:q.filter(status__in=s).count();t=q.count()
+    q=reports_for(u);c=lambda *s:q.filter(status__in=s).count();t=q.count()
     d=dict(total=t,pending=c('Pending'),progress=c('Assigned','In Progress'),resolved=c('Resolved'),emergencies=scope(u).filter(is_emergency=True,status__in=ACTIVE).count())
-    if u.is_official:
+    if u.can_manage_reports:
         w=q.filter(resolved_at__isnull=False,resolved_at__lte=F('created_at')+datetime.timedelta(days=7)).count();d['pct7']=round(w/t*100) if t else 0  # BR-30
     return d
 @login_required
 def home(r):
     u=r.user
+    if u.is_lgu: return redirect('lgu_dashboard')
     if r.resolver_match.url_name!=('official' if u.is_official else 'app'): return redirect('index')
-    g=r.GET;q=scope(u)
+    g=r.GET;q=reports_for(u)
     if g.get('mine')=='1' and not u.is_official: q=q.filter(reporter=u)
     if g.get('category'): q=q.filter(category__name=g['category'])
     if g.get('status') in STATUSES: q=q.filter(status=g['status'])
@@ -104,7 +116,16 @@ def home(r):
     q=q.annotate(o=Case(When(is_emergency=True,status__in=ACTIVE,then=0),default=1,output_field=IntegerField())).order_by('o','-created_at')
     page=Paginator(q,25).get_page(g.get('page'));[deco_report(x,u) for x in page]
     keep=g.copy();keep.pop('page',None)
-    return render(r,'home.html',{'page':page,'stats':stats(u),'cats':Category.objects.all(),'statuses':STATUSES,'g':g,'qs':keep.urlencode(),'filtered':any(g.get(k) for k in('q','category','status','date_from','date_to','mine'))})
+    return render(r,'home.html',{'page':page,'stats':stats(u),'cats':Category.objects.all(),'statuses':STATUSES,'g':g,'qs':keep.urlencode(),'filtered':any(g.get(k) for k in('q','category','status','date_from','date_to','mine')),'staff_members':User.objects.filter(barangay=u.barangay,role='Staff',is_active=True) if u.can_manage_reports else []})
+
+@login_required
+@login_required
+def lgu_dashboard(r):
+    if not r.user.is_lgu: raise PermissionDenied
+    totals=Report.objects.values('status').annotate(count=Count('id')).order_by('status')
+    categories=Report.objects.values('category__name').annotate(count=Count('id')).order_by('-count','category__name')
+    barangays=Report.objects.values('barangay__name','barangay__city_municipality','barangay__province').annotate(count=Count('id')).order_by('-count','barangay__name')
+    return render(r,'lgu_dashboard.html',{'total':Report.objects.count(),'statuses':totals,'categories':categories,'barangays':barangays})
 
 @role(False)
 def new_report(r):
@@ -126,26 +147,39 @@ def new_report(r):
     return render(r,'new_report.html',{'cats':Category.objects.all(),'errors':errs,'v':r.POST})
 @login_required
 def detail(r,pk):
-    u=r.user;x=deco_report(get_object_or_404(scope(u).prefetch_related('photos'),pk=pk),u)
-    return render(r,'detail.html',{'x':x,'history':[(h,'Anonymous' if x.who=='Anonymous' and h.changed_by_id==x.reporter_id else h.changed_by.full_name) for h in x.history.select_related('changed_by')],'comments':x.comments.select_related('author'),'nx':TRANS.get(x.status,[]),'depts':Department.objects.filter(barangay=u.barangay) if u.is_official else []})
+    u=r.user;x=deco_report(get_object_or_404(reports_for(u).prefetch_related('photos'),pk=pk),u)
+    return render(r,'detail.html',{'x':x,'history':[(h,'Anonymous' if x.who=='Anonymous' and h.changed_by_id==x.reporter_id else h.changed_by.full_name) for h in x.history.select_related('changed_by')],'comments':x.comments.select_related('author'),'nx':TRANS.get(x.status,[]),'depts':Department.objects.filter(barangay=x.barangay) if u.can_manage_reports else [],'staff_members':User.objects.filter(barangay=x.barangay,role='Staff',is_active=True) if u.can_manage_reports else []})
 @role(True)
 @require_POST
 def transition(r,pk):
-    d=None;p=r.POST.get('department','')
-    if p.isdigit(): d=get_object_or_404(Department,pk=p,barangay=r.user.barangay)
+    u=r.user;p=r.POST.get('department','');assignee_id=r.POST.get('assigned_to','')
     with transaction.atomic():
-        x=get_object_or_404(scope(r.user).select_for_update(of=('self',)),pk=pk)
-        try: x.change_status(r.POST.get('status'),r.user,r.POST.get('comment',''),d);messages.success(r,f'Status updated to {x.status}.')
+        x=get_object_or_404(reports_for(u).select_for_update(of=('self',)),pk=pk)
+        try:
+            d=get_object_or_404(Department,pk=p,barangay=x.barangay) if p.isdigit() else None
+            assignee=get_object_or_404(User,pk=assignee_id,barangay=x.barangay,role='Staff',is_active=True) if u.can_manage_reports and r.POST.get('status')=='Assigned' and assignee_id.isdigit() else None
+            if u.can_manage_reports and r.POST.get('status')=='Assigned' and not assignee: raise ValidationError('Select a staff member to assign this report to.')
+            x.change_status(r.POST.get('status'),u,r.POST.get('comment',''),d)
+            if assignee:
+                x.assigned_to=assignee;x.save(update_fields=['assigned_to','updated_at'])
+                Notification.objects.create(user=assignee,report=x,message=f'You were assigned report "{x.title}".')
+            messages.success(r,f'Status updated to {x.status}.')
         except ValidationError as e: messages.error(r,' '.join(flat(e.detail)))
     return redirect('detail',pk=pk)
-@role(True)
+@login_required
 @require_POST
 def comment(r,pk):
-    x=get_object_or_404(scope(r.user),pk=pk);t=r.POST.get('comment','').strip()
+    u=r.user
+    if not (u.can_manage_reports or u.is_staff_member or u.role=='Volunteer'): raise PermissionDenied
+    x=get_object_or_404(reports_for(u),pk=pk);t=r.POST.get('comment','').strip()
     if len(t)<2: messages.error(r,'Write a comment first.')
+    elif u.role=='Volunteer' and x.status not in ACTIVE: messages.error(r,'Community updates can only be added to active reports.')
     else:
-        Comment.objects.create(report=x,author=r.user,comment_text=t[:1000],is_official=True)
-        Notification.objects.create(user=x.reporter,report=x,message=f'New official comment on "{x.title}".');messages.success(r,'Comment posted.')
+        Comment.objects.create(report=x,author=u,comment_text=t[:1000],is_official=u.is_official)
+        label='official update' if u.is_official else 'community update'
+        if x.reporter_id!=u.id: Notification.objects.create(user=x.reporter,report=x,message=f'New {label} on "{x.title}".')
+        if x.assigned_to_id and x.assigned_to_id!=u.id: Notification.objects.create(user=x.assigned_to,report=x,message=f'New {label} on "{x.title}".')
+        messages.success(r,'Comment posted.')
     return redirect('detail',pk=pk)
 @role(False)
 @require_POST
@@ -153,15 +187,16 @@ def delete_report(r,pk):
     x=get_object_or_404(scope(r.user),pk=pk)
     if x.reporter_id!=r.user.id or x.status!='Pending': raise PermissionDenied  # BR-18
     x.delete();messages.success(r,'Report deleted.');return redirect('app')
-@role(False)
+@login_required
 def alerts(r):
+    if not (r.user.is_staff_member or r.user.is_reporter): raise PermissionDenied
     items=list(r.user.notifications.order_by('-created_at')[:50]);r.user.notifications.filter(is_read=False).update(is_read=True)
     return render(r,'alerts.html',{'items':items})
 @login_required
 def bulletin(r):
     u=r.user;errs=[]
     if r.method=='POST':
-        if not u.is_official: raise PermissionDenied  # BR-24
+        if not u.can_manage_reports: raise PermissionDenied  # BR-24
         s=AnnS(data=r.POST)
         if s.is_valid(): Announcement.objects.create(barangay=u.barangay,posted_by=u,**s.validated_data);messages.success(r,'Posted.');return redirect('bulletin')
         errs=flat(s.errors)
@@ -170,11 +205,14 @@ def bulletin(r):
     rows=User.objects.filter(barangay=u.barangay,role__in=['Resident','Volunteer']).annotate(t=Count('reports',filter=~Q(reports__status='Rejected')),rs=Count('reports',filter=Q(reports__status='Resolved')),hi=Count('reports',filter=Q(reports__quality_rating__gte=4)&~Q(reports__status='Rejected')))
     rank=sorted(([x.full_name,x.t+2*x.rs+x.hi] for x in rows),key=lambda z:-z[1])[:5]  # BR-26
     return render(r,'bulletin.html',{'items':q if al else q[:5],'more':q.count()>5,'all':al,'errors':errs,'rank':rank,'v':r.POST})
-@role(True)
+@login_required
 @require_POST
-def ann_delete(r,pk): get_object_or_404(Announcement,pk=pk,barangay=r.user.barangay).delete();return redirect('bulletin')
+def ann_delete(r,pk):
+    if not r.user.can_manage_reports: raise PermissionDenied
+    get_object_or_404(Announcement,pk=pk,barangay=r.user.barangay).delete();return redirect('bulletin')
 @login_required
 def photo(r,pk):
-    p=get_object_or_404(ReportPhoto.objects.select_related('report'),pk=pk)
-    if p.report.barangay_id!=r.user.barangay_id: from django.http import Http404;raise Http404
+    p=get_object_or_404(ReportPhoto.objects.select_related('report','report__reporter','report__category'),pk=pk)
+    get_object_or_404(reports_for(r.user),pk=p.report_id)
+    if not r.user.is_superuser and p.report.barangay_id!=r.user.barangay_id: raise Http404
     return FileResponse(p.image.open('rb'),content_type=mimetypes.guess_type(p.image.name)[0] or 'application/octet-stream')
