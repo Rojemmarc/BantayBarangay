@@ -7,7 +7,7 @@ var b=e.submitter||$('button:not([type=button])',f);if(b){setTimeout(function(){
 addEventListener('pageshow',function(){d.querySelectorAll('form[data-busy]').forEach(function(f){delete f.dataset.busy;f.querySelectorAll('button[disabled]').forEach(function(b){b.disabled=false;if(b.dataset.label)b.textContent=b.dataset.label})})});
 if(window.L){d.querySelectorAll('[data-map]').forEach(function(el){var lat=parseFloat(el.dataset.lat),lng=parseFloat(el.dataset.lng),pick=el.hasAttribute('data-pick'),la=$('#latitude'),lo=$('#longitude'),status=$('#mapStatus'),has=!pick||(la&&la.value&&lo&&lo.value);
 if(pick&&has){lat=parseFloat(la.value);lng=parseFloat(lo.value);has=Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180;if(!has){lat=parseFloat(el.dataset.lat);lng=parseFloat(el.dataset.lng)}}
-var m=L.map(el).setView([lat,lng],15),tiles=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(m);
+var m=L.map(el).setView([lat,lng],15),tiles=L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png',{attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',maxZoom:19}).addTo(m);
 var mk=null,put=function(ll){if(mk)mk.setLatLng(ll);else mk=L.circleMarker(ll,{radius:10,color:'#1E3A5F',fillColor:'#F4A825',fillOpacity:1}).addTo(m)};
 if(has)put([lat,lng]);
 tiles.on('tileerror',function(){if(status)status.textContent='Map tiles could not be loaded. Enter the latitude and longitude manually below.'});

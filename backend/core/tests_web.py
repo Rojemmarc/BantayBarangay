@@ -39,6 +39,7 @@ class Web(TestCase):
             assert category.encode() in response.content
         assert b'id="latitude" name="latitude" type="number"' in response.content
         assert b'id="longitude" name="longitude" type="number"' in response.content
+        assert 'https://tile.openstreetmap.de' in response['Content-Security-Policy']
     def test_resident_home_shows_alerts_and_report_links(s):
         s.client.force_login(s.res);response=s.client.get('/app/')
         assert b'href="/app/alerts/"' in response.content
