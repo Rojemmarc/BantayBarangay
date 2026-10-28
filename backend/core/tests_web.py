@@ -14,6 +14,7 @@ class Web(TestCase):
         for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance');P='Str0ng#Pass1'
         s.res=User.objects.create_user('r@x.ph',P,full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph',P,full_name='Off One',barangay=s.b,role='Official')
+        s.lgu=User.objects.create_user('lgu@x.ph',P,full_name='LGU User',barangay=s.b,role='LGU')
         s.other=User.objects.create_user('z@x.ph',P,full_name='Other',barangay=s.b2,role='Official')
     def rep(s,**x):
         d=dict(category=Category.objects.get(name='Flooding').pk,title='Flood',description='x'*25,latitude='10.3',longitude='123.8',photos=png());d.update(x)
@@ -38,6 +39,17 @@ class Web(TestCase):
             assert category.encode() in response.content
         assert b'id="latitude" name="latitude" type="number"' in response.content
         assert b'id="longitude" name="longitude" type="number"' in response.content
+    def test_resident_home_shows_alerts_and_report_links(s):
+        s.client.force_login(s.res);response=s.client.get('/app/')
+        assert b'href="/app/alerts/"' in response.content
+        assert b'href="/app/new/"' in response.content
+    def test_lgu_uses_official_access(s):
+        assert s.lgu.is_official and not s.lgu.is_reporter
+        s.client.force_login(s.lgu)
+        assert s.client.get('/',follow=True).redirect_chain[-1][0]=='/official/'
+        assert s.client.get('/official/').status_code==200
+        assert s.client.get('/app/new/').status_code==403
+        assert s.client.get('/app/alerts/').status_code==403
     def test_register(s):
         d=dict(full_name='New',email='n@x.ph',password='Zx9#kLm2Qw',password2='Zx9#kLm2Qw',barangay=s.b.pk,role='Official')
         assert b'Terms and Privacy' in s.client.post('/register/',d).content

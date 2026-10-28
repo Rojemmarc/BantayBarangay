@@ -123,7 +123,7 @@ class ReportViewSet(ViewSet):
     @transaction.atomic
     def create(s,r):
         u=r.user
-        if u.is_official: raise PermissionDenied('Officials cannot submit resident reports.')
+        if not u.is_reporter: raise PermissionDenied('Only residents and volunteers can submit reports.')
         from django.utils import timezone;import datetime
         if Report.objects.filter(reporter=u,created_at__gte=timezone.now()-datetime.timedelta(days=1)).count()>=5: raise ValidationError('Daily limit reached: 5 reports per day.')  # BR-10
         ser=ReportCreateS(data=r.data);ser.is_valid(raise_exception=True);d=ser.validated_data;c=d['category']

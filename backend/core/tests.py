@@ -16,6 +16,7 @@ class T(APITestCase):
         for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance')
         s.res=User.objects.create_user('r@x.ph','Str0ng#Pass1',full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph','Str0ng#Pass1',full_name='Off One',barangay=s.b,role='Official')
+        s.lgu=User.objects.create_user('lgu@x.ph','Str0ng#Pass1',full_name='LGU User',barangay=s.b,role='LGU')
         s.other=User.objects.create_user('z@x.ph','Str0ng#Pass1',full_name='Other',barangay=s.b2,role='Official')
     def post(s,cat='Flooding',**x):
         d=dict(title='Flood',description='x'*25,category=Category.objects.get(name=cat).id,latitude='10.3',longitude='123.8',photos=[png()]);d.update(x)
@@ -30,6 +31,9 @@ class T(APITestCase):
         for _ in range(5): s.client.post('/api/auth/login/',dict(email='r@x.ph',password='bad'),format='json')
         assert s.client.post('/api/auth/login/',dict(email='r@x.ph',password='Str0ng#Pass1'),format='json').status_code==429
     def test_requires_login(s): assert s.client.get('/api/reports/').status_code in(401,403)
+    def test_lgu_cannot_submit_reports(s):
+        s.client.force_login(s.lgu)
+        assert s.post().status_code==403
     def test_report_rules(s):
         s.client.force_login(s.res)
         assert s.post(description='short').status_code==400 and s.post(photos=[]).status_code==400
