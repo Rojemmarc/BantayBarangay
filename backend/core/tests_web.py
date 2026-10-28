@@ -11,7 +11,7 @@ def png():
 class Web(TestCase):
     def setUp(s):
         cache.clear();s.b=Barangay.objects.create(name='A',city_municipality='C',province='P');s.b2=Barangay.objects.create(name='B',city_municipality='C',province='P')
-        for n in ['Safety','Emergency','Flooding']: Category.objects.create(name=n,is_emergency=n=='Emergency')
+        for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance');P='Str0ng#Pass1'
         s.res=User.objects.create_user('r@x.ph',P,full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph',P,full_name='Off One',barangay=s.b,role='Official')
         s.other=User.objects.create_user('z@x.ph',P,full_name='Other',barangay=s.b2,role='Official')
@@ -32,6 +32,12 @@ class Web(TestCase):
         assert s.client.get('/app/').status_code==302 and s.client.get('/bulletin/').status_code==302
         s.client.force_login(s.res);assert s.client.get('/official/',follow=True).redirect_chain[-1][0]=='/app/' and s.client.get('/reports/1/transition/').status_code in(403,405)
         s.client.force_login(s.off);assert s.client.get('/app/new/').status_code==403
+    def test_new_report_has_categories_and_location_inputs(s):
+        s.client.force_login(s.res);response=s.client.get('/app/new/')
+        for category in ('Infrastructure','Safety','Sanitation','Flooding','Noise','Emergency'):
+            assert category.encode() in response.content
+        assert b'id="latitude" name="latitude" type="number"' in response.content
+        assert b'id="longitude" name="longitude" type="number"' in response.content
     def test_register(s):
         d=dict(full_name='New',email='n@x.ph',password='Zx9#kLm2Qw',password2='Zx9#kLm2Qw',barangay=s.b.pk,role='Official')
         assert b'Terms and Privacy' in s.client.post('/register/',d).content

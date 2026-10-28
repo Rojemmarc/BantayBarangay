@@ -7,8 +7,10 @@
 <label for="description">Description (at least 20 characters)</label><textarea id="description" name="description" rows="4" required minlength="20" maxlength="2000">{{ v.description }}</textarea>
 <label for="photos">Photos (JPG or PNG, 1 to 3, 5 MB each)</label><input id="photos" name="photos" type="file" accept="image/jpeg,image/png" multiple required>
 <label for="location_note">Landmark or address (optional)</label><input id="location_note" name="location_note" value="{{ v.location_note }}" maxlength="255">
-<label>Pin the location: tap the map</label><div class="map" data-map data-pick data-lat="10.3157" data-lng="123.8854" role="application" aria-label="Tap the map to pin the location"></div>
-<input type="hidden" id="latitude" name="latitude" value="{{ v.latitude }}"><input type="hidden" id="longitude" name="longitude" value="{{ v.longitude }}"><p class="mu" id="pinText">{% if v.latitude %}Pinned: {{ v.latitude }}, {{ v.longitude }}{% else %}No pin yet{% endif %}</p>
+<label>Pin the location: click the map or enter coordinates</label><div class="map" data-map data-pick data-lat="10.3157" data-lng="123.8854" role="application" aria-label="Click the map to pin the location"></div>
+<p class="mu" id="mapStatus" role="status">Click the map to place a pin, or enter coordinates below. If map tiles do not load, coordinates can still be entered manually.</p>
+<div class="row"><div style="flex:1"><label for="latitude">Latitude</label><input id="latitude" name="latitude" type="number" inputmode="decimal" step="any" min="-90" max="90" value="{{ v.latitude }}" required></div><div style="flex:1"><label for="longitude">Longitude</label><input id="longitude" name="longitude" type="number" inputmode="decimal" step="any" min="-180" max="180" value="{{ v.longitude }}" required></div></div>
+<p class="mu" id="pinText">{% if v.latitude %}Pinned: {{ v.latitude }}, {{ v.longitude }}{% else %}No pin yet{% endif %}</p>
 <noscript><p class="er">Please enable JavaScript to pin the location on the map.</p></noscript>
 <label class="checkbox-row"><input type="checkbox" name="is_suspicious_activity"{% if v.is_suspicious_activity %} checked{% endif %}><span>Show me as Anonymous to other residents (Safety / suspicious activity only)</span></label>
 <button class="b pr" style="width:100%;margin-top:.75rem">Submit report</button></form>{% endblock %}

@@ -13,7 +13,7 @@ def png():
 class T(APITestCase):
     def setUp(s):
         cache.clear();s.b=Barangay.objects.create(name='A',city_municipality='C',province='P');s.b2=Barangay.objects.create(name='B',city_municipality='C',province='P')
-        for n in ['Safety','Emergency','Flooding']: Category.objects.create(name=n,is_emergency=n=='Emergency')
+        for n in ['Safety','Emergency','Flooding']: Category.objects.get_or_create(name=n,defaults={'is_emergency':n=='Emergency'})
         s.d=Department.objects.create(barangay=s.b,name='Maintenance')
         s.res=User.objects.create_user('r@x.ph','Str0ng#Pass1',full_name='Res One',barangay=s.b);s.off=User.objects.create_user('o@x.ph','Str0ng#Pass1',full_name='Off One',barangay=s.b,role='Official')
         s.other=User.objects.create_user('z@x.ph','Str0ng#Pass1',full_name='Other',barangay=s.b2,role='Official')
