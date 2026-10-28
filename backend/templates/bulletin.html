@@ -1,0 +1,11 @@
+{% extends 'base.html' %}{% block title %}Bulletin · BantayBarangay{% endblock %}
+{% block content %}<h1>Community bulletin</h1>
+{% if user.is_official %}<form class="c" method="post" novalidate>{% csrf_token %}<h2 style="margin-top:0">Post announcement</h2>{% include 'partials/errors.html' %}
+<label for="title">Title</label><input id="title" name="title" value="{{ v.title }}" required minlength="3" maxlength="150"><label for="type">Type</label><select id="type" name="type"><option>Announcement</option><option>Advisory</option><option>Event</option></select>
+<label for="event_date">Event date (events only)</label><input id="event_date" name="event_date" type="date"><label for="body">Message</label><textarea id="body" name="body" rows="3" required minlength="5" maxlength="2000">{{ v.body }}</textarea>
+<button class="b pr" style="margin-top:.75rem">Post</button></form>{% endif %}
+{% for a in items %}<div class="c"><div class="row"><b>{{ a.title }}</b><span class="bg st-pending">{{ a.type }}</span></div><p class="mu">{{ a.created_at|date:"M j, Y g:i A" }} · {{ a.posted_by.full_name }}{% if a.event_date %} · Event: {{ a.event_date }}{% endif %}</p><p>{{ a.body|linebreaksbr }}</p>
+{% if user.is_official %}<form method="post" action="{% url 'ann_delete' a.pk %}" data-confirm="Delete this announcement?">{% csrf_token %}<button class="b rd">Delete</button></form>{% endif %}</div>
+{% empty %}{% include 'partials/empty.html' with title='No announcements yet' message='Officials will post advisories and events here.' %}{% endfor %}
+{% if more %}<a class="b" href="{% if all %}?{% else %}?all=1{% endif %}">{% if all %}Show recent 5{% else %}Show all{% endif %}</a>{% endif %}
+<h2>Top community reporters</h2><div class="c">{% for n,p in rank %}<div class="row"><span>{{ forloop.counter }}. {{ n }}</span><b>{{ p }} pts</b></div>{% empty %}<span class="mu">No data yet</span>{% endfor %}</div>{% endblock %}

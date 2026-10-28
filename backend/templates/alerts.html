@@ -1,0 +1,3 @@
+{% extends 'base.html' %}{% block title %}Alerts · BantayBarangay{% endblock %}
+{% block content %}<h1>Notifications</h1>{% for n in items %}<a class="c{% if not n.is_read %} unread{% endif %}" href="{% if n.report_id %}{% url 'detail' n.report_id %}{% else %}#{% endif %}">{{ n.message }}<div class="mu">{{ n.created_at|date:"M j, Y g:i A" }}</div></a>
+{% empty %}{% include 'partials/empty.html' with title='You are all caught up' message='Report updates and official comments will appear here.' %}{% endfor %}{% endblock %}

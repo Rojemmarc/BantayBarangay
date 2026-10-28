@@ -1,0 +1,2 @@
+<a class="c{% if x.active %} em{% endif %}" href="{% url 'detail' x.pk %}"><div class="row"><b>{% if x.is_emergency %}⚠ {% endif %}{{ x.title }}</b>{% include 'partials/badge.html' with status=x.status %}</div>
+<div class="mu">{{ x.category.name }} · {{ x.who }} · {{ x.created_at|date:"M j, Y g:i A" }}{% if x.department %} · {{ x.department.name }}{% endif %}</div></a>

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% load static %}{% block title %}New report · BantayBarangay{% endblock %}
+{% block vendor %}<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}"><script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>{% endblock %}
+{% block content %}<form class="c" method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}<h1>New report</h1>{% include 'partials/errors.html' %}
+<label for="category">Category</label><select id="category" name="category" required><option value="">Select…</option>{% for c in cats %}<option value="{{ c.pk }}"{% if v.category == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+<p class="mu">⚠ Emergency is for fires, missing persons or imminent danger. Also call 911 or the barangay hotline.</p>
+<label for="title">Title</label><input id="title" name="title" value="{{ v.title }}" required minlength="3" maxlength="150">
+<label for="description">Description (at least 20 characters)</label><textarea id="description" name="description" rows="4" required minlength="20" maxlength="2000">{{ v.description }}</textarea>
+<label for="photos">Photos (JPG or PNG, 1 to 3, 5 MB each)</label><input id="photos" name="photos" type="file" accept="image/jpeg,image/png" multiple required>
+<label for="location_note">Landmark or address (optional)</label><input id="location_note" name="location_note" value="{{ v.location_note }}" maxlength="255">
+<label>Pin the location: tap the map</label><div class="map" data-map data-pick data-lat="10.3157" data-lng="123.8854" role="application" aria-label="Tap the map to pin the location"></div>
+<input type="hidden" id="latitude" name="latitude" value="{{ v.latitude }}"><input type="hidden" id="longitude" name="longitude" value="{{ v.longitude }}"><p class="mu" id="pinText">{% if v.latitude %}Pinned: {{ v.latitude }}, {{ v.longitude }}{% else %}No pin yet{% endif %}</p>
+<noscript><p class="er">Please enable JavaScript to pin the location on the map.</p></noscript>
+<label class="checkbox-row"><input type="checkbox" name="is_suspicious_activity"{% if v.is_suspicious_activity %} checked{% endif %}><span>Show me as Anonymous to other residents (Safety / suspicious activity only)</span></label>
+<button class="b pr" style="width:100%;margin-top:.75rem">Submit report</button></form>{% endblock %}
