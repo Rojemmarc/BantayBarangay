@@ -10,6 +10,7 @@
 {% if user.is_reporter or user.is_staff_member %}<a href="{% url 'alerts' %}"{% if n == 'alerts' %} class="active"{% endif %}>Alerts{% if unread %} ({{ unread }}){% endif %}</a>{% endif %}
 <a href="{% url 'bulletin' %}"{% if n == 'bulletin' %} class="active"{% endif %}>Bulletin</a></nav>{% endwith %}
 <div class="user-tools"><button type="button" class="tg" id="themeToggle" aria-label="Switch to dark mode">☾</button>
+<a class="b" href="{% url 'profile' %}">Profile</a>
 <form method="post" action="{% url 'logout' %}" data-nobusy>{% csrf_token %}<button class="b">Log out</button></form></div></header>
 {% else %}<button type="button" class="tg auth-theme-toggle" id="themeToggle" aria-label="Switch to dark mode">☾</button>{% endif %}
 <main class="{% block mainclass %}{% endblock %}">

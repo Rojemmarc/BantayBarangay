@@ -12,6 +12,15 @@ class RegisterS(S.Serializer):
         if not v: raise S.ValidationError('You must accept the Terms and Privacy Policy.')
         return v
     def validate(s,a): validate_password(a['password'],User(email=a['email'],full_name=a['full_name'])); return a
+class ProfileS(S.Serializer):
+    full_name=S.CharField(min_length=2,max_length=150)
+    email=S.EmailField()
+    contact_number=S.CharField(max_length=20,required=False,allow_blank=True)
+    def validate_email(s,v):
+        v=v.lower()
+        user=s.context['user']
+        if User.objects.filter(email__iexact=v).exclude(pk=user.pk).exists(): raise S.ValidationError('This email is already registered.')
+        return v
 class ReportCreateS(S.Serializer):
     title=S.CharField(min_length=3,max_length=150);description=S.CharField(min_length=20,max_length=2000)  # BR-08
     category=S.PrimaryKeyRelatedField(queryset=Category.objects.all())

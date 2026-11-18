@@ -18,7 +18,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from rest_framework.exceptions import ValidationError
 from .models import *
-from .serializers import AnnS,RegisterS,ReportCreateS
+from .serializers import AnnS,ProfileS,RegisterS,ReportCreateS
 
 ACTIVE=['Pending','Assigned','In Progress']
 def flat(e,k=None,out=None):
@@ -86,6 +86,23 @@ def register_view(r):
             messages.success(r,'Account created. Please log in.');return redirect('login')
         else: errs=flat(s.errors)
     return render(r,'auth/register.html',{'errors':errs,'barangays':Barangay.objects.all(),'v':r.POST})
+@login_required
+def profile(r):
+    errs=[]
+    u=r.user
+    if r.method=='POST':
+        s=ProfileS(data=r.POST,context={'user':u})
+        if s.is_valid():
+            d=s.validated_data
+            u.full_name=d['full_name'];u.email=d['email'];u.contact_number=d.get('contact_number','')
+            u.save(update_fields=['full_name','email','contact_number'])
+            messages.success(r,'Profile updated.')
+            return redirect('profile')
+        errs=flat(s.errors)
+    v={'full_name':u.full_name,'email':u.email,'contact_number':u.contact_number}
+    if r.method=='POST': v=r.POST
+    return render(r,'profile.html',{'errors':errs,'v':v})
+
 def forgot(r):
     sent=False
     if r.method=='POST':

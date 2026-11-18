@@ -25,6 +25,18 @@ class Web(TestCase):
         r=s.client.post('/login/',{'email':'r@x.ph','password':'Str0ng#Pass1'});assert r.status_code==302 and r.url=='/'
         assert s.client.get('/',follow=True).redirect_chain[-1][0]=='/app/'
         c=Client();c.post('/login/',{'email':'o@x.ph','password':'Str0ng#Pass1'});assert c.get('/',follow=True).redirect_chain[-1][0]=='/official/'
+    def test_profile_view_and_update(s):
+        assert s.client.get('/profile/').status_code==302
+        s.client.force_login(s.res)
+        page=s.client.get('/profile/')
+        assert page.status_code==200 and b'Res One' in page.content and b'r@x.ph' in page.content
+        response=s.client.post('/profile/',{'full_name':'Updated Resident','email':'updated@x.ph','contact_number':'09171234567'})
+        assert response.status_code==302
+        s.res.refresh_from_db()
+        assert s.res.full_name=='Updated Resident' and s.res.email=='updated@x.ph' and s.res.contact_number=='09171234567'
+        assert b'already registered' in s.client.post('/profile/',{'full_name':'Updated Resident','email':'o@x.ph','contact_number':''}).content
+        assert s.client.post('/logout/').status_code==302
+        assert s.client.get('/profile/').status_code==302
     def test_bad_login_generic_and_lockout(s):
         r=s.client.post('/login/',{'email':'r@x.ph','password':'bad'});assert b'Incorrect email or password.' in r.content
         for _ in range(5): s.client.post('/login/',{'email':'r@x.ph','password':'bad'})
@@ -81,7 +93,9 @@ class Web(TestCase):
     def test_register(s):
         d=dict(full_name='New',email='n@x.ph',password='Zx9#kLm2Qw',password2='Zx9#kLm2Qw',barangay=s.b.pk,role='Official')
         assert b'Terms and Privacy' in s.client.post('/register/',d).content
-        assert s.client.post('/register/',{**d,'consent':'on'}).status_code==302;assert User.objects.get(email='n@x.ph').role=='Resident'
+        assert s.client.post('/register/',{**d,'consent':'on'}).status_code==302
+        created=User.objects.get(email='n@x.ph')
+        assert created.role=='Resident' and created.check_password('Zx9#kLm2Qw') and not created.password=='Zx9#kLm2Qw'
     def test_report_flow_and_escaping(s):
         s.client.force_login(s.res);r=s.rep(title='<script>alert(1)</script>');assert r.status_code==302
         page=s.client.get(r.url);assert b'<script>alert(1)' not in page.content and b'&lt;script&gt;' in page.content
